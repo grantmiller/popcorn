@@ -60,6 +60,7 @@ handle_cast(expire_logs_complete, State) ->
 handle_cast(_Msg, State)            -> {noreply, State}.
 
 handle_info(severity_retention_expire, State) ->
+  ?POPCORN_DEBUG_MSG("severity-retention_expire"),
     {ok, Retentions} = application:get_env(popcorn, log_retention),
 
     Params = lists:map(fun({Severity, Retention_Interval}) ->

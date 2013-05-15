@@ -55,7 +55,7 @@ init([]) ->
 
     ?POPCORN_DEBUG_MSG("#storage_monitor starting"),
     Workers = pg2:get_local_members(storage),
-    lager:info("Monitoring ~p", [Workers]),
+    ?POPCORN_INFO_MSG("Monitoring ~p", [Workers]),
     [spawn(?MODULE, monitor_storage, [Proc]) || Proc <- Workers],
 
     erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
@@ -90,7 +90,7 @@ monitor_storage(Proc) ->
        {'DOWN', Ref, process, Pid,  normal} -> ok;
        {'DOWN', Ref, process, Pid,  Reason} ->
             Workers = pg2:get_local_members(storage) -- [Proc],
-            lager:info("Detected down storage node - published reduced set of workers ~p", [Workers]),
+            ?POPCORN_INFO_MSG("Detected down storage node - published reduced set of workers ~p", [Workers]),
             pubsub:publish(storage, {new_storage_workers, Workers})
     end.
 
