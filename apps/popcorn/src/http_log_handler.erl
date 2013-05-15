@@ -150,14 +150,14 @@ handle_path(<<"GET">>, [<<"log">>], Req, State) ->
                                       {default_filters, dict:from_list(Default_Filters)}]),
 
             case cowboy_req:qs_val(<<"beta">>, Req) of
-                {<<"1">>, _} ->
-                    TFun = pcache:get(rendered_templates, view_log_beta),
-                    Output = mustache:render(view_log_beta, TFun, Context),
+                {<<"0">>, _} ->
+                    TFun = pcache:get(rendered_templates, view_log),
+                    Output = mustache:render(view_log, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State};
                 _ ->
-                    TFun = pcache:get(rendered_templates, view_log),
-                    Output = mustache:render(view_log, TFun, Context),
+                    TFun = pcache:get(rendered_templates, view_log_beta),
+                    Output = mustache:render(view_log_beta, TFun, Context),
                     {ok, Reply} = cowboy_req:reply(200, [], Output, Req),
                     {ok, Reply, State}
             end
