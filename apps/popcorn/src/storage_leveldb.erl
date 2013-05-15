@@ -127,12 +127,21 @@ handle_call({counter_value, Counter}, _From, State) ->
   {reply, Counter_Value, State};
 handle_call({get_alert, Key}, _From, State) ->
   case eleveldb:get(State#state.db_ref, key_name(alert, Key), []) of
-    {ok, V} ->
-      {reply, V, State};
+    {ok, Alert_Bin} ->
+      {reply, binary_to_term(Alert_Bin), State};
     not_found ->
       {reply, undefined, State}
   end;
-handle_call({get_alerts, Severity, Sort}, _From, State) ->
+handle_call({get_alerts, Severities, Sort}, _From, State) ->
+
+  {reply, [], State};
+handle_call({get_alert_keys, Type}, _Fro, State) ->
+  {reply, [], State};
+handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
+  {reply, undefined, State};
+handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
+  {reply, [], State};
+handle_call({get_alert_timestamps, Severities}, _From, State) ->
   {reply, [], State};
 handle_call({is_known_node, Node_Name}, _From, State) ->
   case eleveldb:get(State#state.db_ref, key_name(collection, <<"nodes">>), []) of
@@ -141,10 +150,8 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
     not_found ->
       {reply, false, State}
   end;
-
-handle_call(Msg, _From, State) ->
-  ?POPCORN_ERROR_MSG("Unknown Msg = ~p", [Msg]),
-  {reply, undefined, State}.
+handle_call(Request, _From, State) ->
+  {stop, {unknown_call, Request}, State}.
 
 handle_cast({expire_logs_matching, _}, State) ->
   %% TODO spawn this into a new process
@@ -187,6 +194,16 @@ handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
   {ok, Iterator} = eleveldb:iterator(State#state.db_ref, []),
   {ok, _, _} = eleveldb:iterator_move(Iterator, ?BOOKMARK_MESSAGE),
   send_recent_log_line(State#state.db_ref, Iterator, Pid, Count, Filters),
+  {noreply, State};
+handle_cast({new_release_scm, Record}, State) ->
+  {noreply, State};
+handle_cast({new_alert, Key, #alert{} = Record}, State) ->
+  {noreply, State};
+handle_cast({new_alert_timestamp, Key, Severity, #alert{timestamp = Timestamp} = Record}, State) ->
+  {noreply, State};
+handle_cast({new_alert_key, Type, Key}, State) ->
+  {noreply, State};
+handle_cast({new_release_scm_mapping, Record}, State) ->
   {noreply, State};
 
 handle_cast(_Msg, State) -> {noreply, State}.
