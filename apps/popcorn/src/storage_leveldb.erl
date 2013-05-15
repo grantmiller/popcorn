@@ -150,7 +150,9 @@ handle_cast({expire_logs_matching, _}, State) ->
   %% TODO spawn this into a new process
   {ok, Iterator} = eleveldb:iterator(State#state.db_ref, []),
   {ok, _, _} = eleveldb:iterator_move(Iterator, ?BOOKMARK_EXPIRATION),
-  expire_iterate(State#state.db_ref, Iterator, ?NOW),
+  Deleted_Counts = lists:map(fun({_, S}) -> {S, 0} end, popcorn_util:all_severities()),
+  expire_iterate(State#state.db_ref, Iterator, ?NOW, Deleted_Counts),
+  history_optimizer:expire_logs_complete(),
   {noreply, State};
 handle_cast({new_log_message, Log_Message}, State) ->
   Inverse_Id = popcorn_util:inverse_id(Log_Message#log_message.message_id),
@@ -221,21 +223,32 @@ send_recent_log_line(Db_Ref, Iterator, Pid, Count, Filters) ->
       send_recent_log_line(Db_Ref, Iterator, Pid, Count - 1, Filters)
   end.
 
-expire_iterate(Db_Ref, Iterator, Now) ->
+expire_iterate(Db_Ref, Iterator, Now, Deleted_Counts) ->
   Next_Bookmark = ?BOOKMARK_END,
   case eleveldb:iterator_move(Iterator, next) of
     {error, invalid_iterator} ->
+      save_deleted_counts(Deleted_Counts),
       ok;
     {ok, Next_Bookmark, _} ->
+      save_deleted_counts(Deleted_Counts),
       ok;
     {ok, Expire_Key, Message_Key} ->
       Expire_At = list_to_integer(binary_to_list(binary:part(Expire_Key, {1,  byte_size(Expire_Key) - 1}))),
       case Expire_At of
         Should_Expire when Should_Expire < Now ->
           eleveldb:delete(Db_Ref, Expire_Key, []),
+          {ok, Log_Message_Bin} = eleveldb:get(Db_Ref, key_name(message, Message_Key), []),
+          Log_Message = binary_to_term(Log_Message_Bin),
           eleveldb:delete(Db_Ref, key_name(message, Message_Key), []),
-          expire_iterate(Db_Ref, Iterator, Now);
+          Last_Value = proplists:get_value(Log_Message#log_message.severity, Deleted_Counts),
+          New_Deleted_Counts = proplists:delete(Log_Message#log_message.severity, Deleted_Counts) ++ [{Log_Message#log_message.severity, Last_Value + 1}],
+          expire_iterate(Db_Ref, Iterator, Now, New_Deleted_Counts);
         _ ->
+          save_deleted_counts(Deleted_Counts),
           ok
       end
   end.
+
+save_deleted_counts(Deleted_Counts) ->
+  system_counters:set_severity_counters(Deleted_Counts),
+  ok.
