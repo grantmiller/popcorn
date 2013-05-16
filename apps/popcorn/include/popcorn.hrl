@@ -70,7 +70,8 @@
                       identities = [] :: list(),
                       log_function    :: binary(),
                       log_line        :: integer(),
-                      log_pid         :: binary()}).
+                      log_pid         :: binary(),
+                      alert_locations = [] :: list()}).
 
 -record(release_scm, {
         key :: binary(),
@@ -87,25 +88,7 @@
         url :: binary()
         }).
 
--record(alert, {
-        location,
-        log,
-        timestamp = erlang:now(),
-        incident
-}).
+-record(alert, {location :: binary(),
+                message_ids :: list(),
+                most_recent_timestamp :: number()}).
 
--record(alert_key, {
-        type,
-        key
-}).
-
--record(alert_counter, {
-        key,
-        value
-}).
-
--record(alert_timestamps, {
-        key,
-        timestamp,
-        severity
-}).

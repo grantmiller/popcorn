@@ -146,7 +146,14 @@ handle_call({get_alerts, Severities, Sort}, _From, State) ->
         _ ->
           {reply,
            lists:filter(fun(Alert) ->
-               Log_Message = Alert#alert.log,
+               Max_Message_Id = lists:max(Alert#alert.message_ids),
+               Log_Message =
+                 case eleveldb:get(State#state.db_ref, key_name(message, popcorn_util:inverse_id(Max_Message_Id)), []) of
+                   not_found ->
+                     undefined;
+                   {ok, Log_Message_Bin} ->
+                    binary_to_term(Log_Message_Bin)
+                 end,
                Severity = Log_Message#log_message.severity,
                lists:member(Severity, Severities)
              end, Alerts),
@@ -168,6 +175,14 @@ handle_call({is_known_node, Node_Name}, _From, State) ->
     not_found ->
       {reply, false, State}
   end;
+handle_call({alert_exists, Alert_Location}, _From, State) ->
+  case eleveldb:get(State#state.db_ref, key_name(alert, Alert_Location), []) of
+    not_found ->
+      {reply, false, State};
+    {ok, _} ->
+      {reply, true, State}
+  end;
+
 handle_call(Request, _From, State) ->
   {stop, {unknown_call, Request}, State}.
 
@@ -213,24 +228,34 @@ handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
   {ok, _, _} = eleveldb:iterator_move(Iterator, ?BOOKMARK_MESSAGE),
   send_recent_log_line(State#state.db_ref, Iterator, Pid, Count, Filters),
   {noreply, State};
+
 handle_cast({new_release_scm, Release_Scm}, State) ->
   eleveldb:put(State#state.db_ref, key_name(releasescm, Release_Scm#release_scm.key), term_to_binary(Release_Scm), []),
   {noreply, State};
-handle_cast({new_alert, Key, #alert{} = Alert}, State) ->
-  eleveldb:put(State#state.db_ref, key_name(alert, Key), term_to_binary(Alert#alert{location = Key}), []),
+handle_cast({new_release_scm_mapping, Record}, State) ->
+  {noreply, State};
+
+handle_cast({new_alert, #alert{} = Alert, Message_Id}, State) ->
+  eleveldb:put(State#state.db_ref, key_name(alert, Alert#alert.location), term_to_binary(Alert), []),
   case eleveldb:get(State#state.db_ref, key_name(collection, <<"alerts">>), []) of
     {ok, Last_Alerts_Bin} ->
       Last_Alerts = binary_to_term(Last_Alerts_Bin),
-      eleveldb:put(State#state.db_ref, key_name(collection, <<"alerts">>), term_to_binary(Last_Alerts ++ [Key]), []);
+      eleveldb:put(State#state.db_ref, key_name(collection, <<"alerts">>), term_to_binary(Last_Alerts ++ [Alert#alert.location]), []);
     not_found ->
-      eleveldb:put(State#state.db_ref, key_name(collection, <<"alerts">>), term_to_binary([Key]), [])
+      eleveldb:put(State#state.db_ref, key_name(collection, <<"alerts">>), term_to_binary([Alert#alert.location]), [])
   end,
   {noreply, State};
-handle_cast({new_alert_timestamp, Key, Severity, #alert{timestamp = Timestamp} = Record}, State) ->
-  {noreply, State};
-handle_cast({new_alert_key, Type, Key}, State) ->
-  {noreply, State};
-handle_cast({new_release_scm_mapping, Record}, State) ->
+handle_cast({new_alert_instance, Alert_Location, Message_Id}, State) ->
+  case eleveldb:get(State#state.db_ref, key_name(alert, Alert_Location), []) of
+    not_found ->
+      ?POPCORN_WARN_MSG("attempted to add new alert instance to alert that was not found"),
+      ok;
+    {ok, Alert_Bin} ->
+      Alert = binary_to_term(Alert_Bin),
+      Updated_Alert = Alert#alert{message_ids = Alert#alert.message_ids ++ [Message_Id],
+                                  most_recent_timestamp = ?NOW},
+      eleveldb:put(State#state.db_ref, key_name(alert, Alert_Location), term_to_binary(Updated_Alert), [])
+  end,
   {noreply, State};
 
 handle_cast(_Msg, State) -> {noreply, State}.
