@@ -40,42 +40,47 @@
 -record(state, {db_ref :: reference()}).
 
 -define(DAY_IN_MILLIS, 24 * 60 * 60 * 1000000).
--define(PREFIX_MESSAGE, <<"1">>).
--define(PREFIX_ALERT, <<"2">>).
--define(PREFIX_EVENT, <<"3">>).
--define(PREFIX_COUNTER, <<"4">>).
--define(PREFIX_NODE, <<"5">>).
--define(PREFIX_COLLECTION, <<"6">>).
--define(PREFIX_EXPIRATION, <<"7">>).
+-define(PREFIX_COLLECTION, <<"10">>).
+-define(PREFIX_NODE, <<"11">>).
+-define(PREFIX_COUNTER, <<"12">>).
+-define(PREFIX_MESSAGE, <<"13">>).
+-define(PREFIX_EXPIRATION, <<"14">>).
+-define(PREFIX_ALERT, <<"15">>).
+-define(PREFIX_ALERTKEY, <<"16">>).
+-define(PREFIX_ALERTCOUNTER, <<"17">>).
+-define(PREFIX_ALERTTIMESTAMP, <<"18">>).
+-define(PREFIX_RELEASESCM, <<"19">>).
+-define(PREFIX_RELEASESCMMAPPING, <<"20">>).
 
--define(BOOKMARK_MESSAGE, key_name(message, base62:encode(0))).
--define(BOOKMARK_ALERT, key_name(alert, base62:encode(0))).
--define(BOOKMARK_NODE, key_name(node, base62:encode(0))).
--define(BOOKMARK_COLLECTION, key_name(collection, base62:encode(0))).
--define(BOOKMARK_EXPIRATION, key_name(expiration, base62:encode(0))).
--define(BOOKMARK_END, key_name(<<"9">>, base62:encode(99999999999999999999999999999999))).
+-define(BOOKMARK_COLLECTION, key_name(collection, "0")).
+-define(BOOKMARK_NODE, key_name(node, "0")).
+-define(BOOKMARK_COUNTER, key_name(counter, "0")).
+-define(BOOKMARK_MESSAGE, key_name(message, "0")).
+-define(BOOKMARK_EXPIRATION, key_name(expiration, "0")).
+-define(BOOKMARK_ALERT, key_name(alert, "0")).
+-define(BOOKMARK_ALERTKEY, key_name(alertkey, "0")).
+-define(BOOKMARK_ALERTCOUNTER, key_name(alertcounter, "0")).
+-define(BOOKMARK_ALERTTIMESTAMP, key_name(alerttimestamp, "0")).
+-define(BOOKMARK_RELEASESCM, key_name(releasescm, "0")).
+-define(BOOKMARK_RELEASESCMMAPPING, key_name(releasescmmapping, "0")).
+-define(BOOKMARK_END, key_name(<<"99">>, "0")).
 
 start_link() -> gen_server:start_link(?MODULE, [], []).
 start_worker() -> gen_server:start_link(?MODULE, [worker], []).
 
-key_name(Type, Name) when is_binary(Name) =/= true ->
-  key_name(Type, popcorn_util:any_to_bin(Name));
-key_name(message, Name) ->
-  <<?PREFIX_MESSAGE/binary, Name/binary>>;
-key_name(alert, Name) ->
-  <<?PREFIX_ALERT/binary, Name/binary>>;
-key_name(event, Name) ->
-  <<?PREFIX_EVENT/binary, Name/binary>>;
-key_name(counter, Name) ->
-  <<?PREFIX_COUNTER/binary, Name/binary>>;
-key_name(node, Name) ->
-  <<?PREFIX_NODE/binary, Name/binary>>;
-key_name(collection, Name) ->
-  <<?PREFIX_COLLECTION/binary, Name/binary>>;
-key_name(expiration, Name) ->
-  <<?PREFIX_EXPIRATION/binary, Name/binary>>;
-key_name(O, Name) when O =:= <<"9">> ->
-  <<O/binary, Name/binary>>.
+key_name(Type, Name) when is_binary(Name) =/= true -> key_name(Type, popcorn_util:any_to_bin(Name));
+key_name(collection, Name) -> <<?PREFIX_COLLECTION/binary, Name/binary>>;
+key_name(node, Name) -> <<?PREFIX_NODE/binary, Name/binary>>;
+key_name(counter, Name) -> <<?PREFIX_COUNTER/binary, Name/binary>>;
+key_name(message, Name) -> <<?PREFIX_MESSAGE/binary, Name/binary>>;
+key_name(expiration, Name) -> <<?PREFIX_EXPIRATION/binary, Name/binary>>;
+key_name(alert, Name) -> <<?PREFIX_ALERT/binary, Name/binary>>;
+key_name(alertkey, Name) -> <<?PREFIX_ALERT/binary, Name/binary>>;
+key_name(alertcounter, Name) -> <<?PREFIX_ALERTCOUNTER/binary, Name/binary>>;
+key_name(alerttimestamp, Name) -> <<?PREFIX_ALERTTIMESTAMP/binary, Name/binary>>;
+key_name(releasescm, Name) -> <<?PREFIX_RELEASESCM/binary, Name/binary>>;
+key_name(releasescmmapping, Name) -> <<?PREFIX_RELEASESCMMAPPING/binary, Name/binary>>;
+key_name(O, Name) when O =:= <<"99">> -> <<O/binary, Name/binary>>.
 
 init([]) ->
   {ok, undefined};
@@ -92,29 +97,21 @@ init([worker]) ->
   {ok, Db_Ref} = eleveldb:open(Storage_Dir, [{create_if_missing, true}]),
 
   %% create some bookmarks
-  eleveldb:put(Db_Ref, ?BOOKMARK_MESSAGE, <<>>, []),
-  eleveldb:put(Db_Ref, ?BOOKMARK_ALERT, <<>>, []),
-  eleveldb:put(Db_Ref, ?BOOKMARK_NODE, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_COLLECTION, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_NODE, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_COUNTER, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_MESSAGE, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_EXPIRATION, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_ALERT, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_ALERTKEY, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_ALERTCOUNTER, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_ALERTTIMESTAMP, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_RELEASESCM, <<>>, []),
+  eleveldb:put(Db_Ref, ?BOOKMARK_RELEASESCMMAPPING, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_END, <<>>, []),
 
   pg2:join('storage', self()),
   {ok, #state{db_ref = Db_Ref}}.
-
-handle_call(most_recent_log, _From, State) ->
-  {ok, Iterator} = eleveldb:iterator(State#state.db_ref, []),
-  {ok, _, _} = eleveldb:iterator_move(Iterator, ?BOOKMARK_MESSAGE),
-  {ok, _, Log_Message} = eleveldb:iterator_move(Iterator, next),
-  ?POPCORN_DEBUG_MSG("Log_Message = ~p", [binary_to_term(Log_Message)]),
-  {reply, ok, State};
-handle_call(first_node, _From, State) ->
-  {ok, Iterator} = eleveldb:iterator(State#state.db_ref, []),
-  {ok, K, _} = eleveldb:iterator_move(Iterator, ?BOOKMARK_NODE),
-  {ok, K2, Node} = eleveldb:iterator_move(Iterator, next),
-  ?POPCORN_DEBUG_MSG("K = ~p, K2 = ~p", [K, K2]),
-  ?POPCORN_DEBUG_MSG("Node = ~p", [binary_to_term(Node)]),
-  {reply, ok, State};
 
 handle_call({counter_value, Counter}, _From, State) ->
   Counter_Value =
@@ -133,9 +130,30 @@ handle_call({get_alert, Key}, _From, State) ->
       {reply, undefined, State}
   end;
 handle_call({get_alerts, Severities, Sort}, _From, State) ->
-
-  {reply, [], State};
-handle_call({get_alert_keys, Type}, _Fro, State) ->
+  case eleveldb:get(State#state.db_ref, key_name(collection, <<"alerts">>), []) of
+    not_found ->
+      {reply, [], State};
+    {ok, Alerts_Bin} ->
+      Alert_Locations = binary_to_term(Alerts_Bin),
+      Alerts =
+        lists:map(fun(Alert_Location) ->
+          {ok, Alert_Bin} = eleveldb:get(State#state.db_ref, key_name(alert, Alert_Location), []),
+          binary_to_term(Alert_Bin)
+        end, Alert_Locations),
+      case Severities of
+        all ->
+          {reply, Alerts, State};
+        _ ->
+          {reply,
+           lists:filter(fun(Alert) ->
+               Log_Message = Alert#alert.log,
+               Severity = Log_Message#log_message.severity,
+               lists:member(Severity, Severities)
+             end, Alerts),
+           State}
+      end
+  end;
+handle_call({get_alert_keys, Type}, _From, State) ->
   {reply, [], State};
 handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
   {reply, undefined, State};
@@ -182,9 +200,9 @@ handle_cast({add_node, Popcorn_Node}, State) ->
   case eleveldb:get(State#state.db_ref, key_name(collection, <<"nodes">>), []) of
     {ok, Last_Nodes_Bin} ->
       Last_Nodes = binary_to_term(Last_Nodes_Bin),
-      eleveldb:put(State#state.db_ref, key_name(collection, <<"nodes">>), Last_Nodes ++ Node_Name, []);
+      eleveldb:put(State#state.db_ref, key_name(collection, <<"nodes">>), term_to_binary(Last_Nodes ++ [Node_Name]), []);
     not_found ->
-      eleveldb:put(State#state.db_ref, key_name(collection, <<"nodes">>), [Node_Name], [])
+      eleveldb:put(State#state.db_ref, key_name(collection, <<"nodes">>), term_to_binary([Node_Name]), [])
   end,
 
   eleveldb:put(State#state.db_ref, key_name(node, Node_Name), term_to_binary(Popcorn_Node), []),
@@ -195,9 +213,18 @@ handle_cast({send_recent_matching_log_lines, Pid, Count, Filters}, State) ->
   {ok, _, _} = eleveldb:iterator_move(Iterator, ?BOOKMARK_MESSAGE),
   send_recent_log_line(State#state.db_ref, Iterator, Pid, Count, Filters),
   {noreply, State};
-handle_cast({new_release_scm, Record}, State) ->
+handle_cast({new_release_scm, Release_Scm}, State) ->
+  eleveldb:put(State#state.db_ref, key_name(releasescm, Release_Scm#release_scm.key), term_to_binary(Release_Scm), []),
   {noreply, State};
-handle_cast({new_alert, Key, #alert{} = Record}, State) ->
+handle_cast({new_alert, Key, #alert{} = Alert}, State) ->
+  eleveldb:put(State#state.db_ref, key_name(alert, Key), term_to_binary(Alert#alert{location = Key}), []),
+  case eleveldb:get(State#state.db_ref, key_name(collection, <<"alerts">>), []) of
+    {ok, Last_Alerts_Bin} ->
+      Last_Alerts = binary_to_term(Last_Alerts_Bin),
+      eleveldb:put(State#state.db_ref, key_name(collection, <<"alerts">>), term_to_binary(Last_Alerts ++ [Key]), []);
+    not_found ->
+      eleveldb:put(State#state.db_ref, key_name(collection, <<"alerts">>), term_to_binary([Key]), [])
+  end,
   {noreply, State};
 handle_cast({new_alert_timestamp, Key, Severity, #alert{timestamp = Timestamp} = Record}, State) ->
   {noreply, State};
