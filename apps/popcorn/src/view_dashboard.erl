@@ -54,7 +54,8 @@ alert_count_today() -> triage_handler:alert_count_today().
 -spec alert_count() -> integer().
 alert_count() -> triage_handler:alert_count().
 
-alerts() -> [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(alert_lines(), [?POPCORN_ERROR])].
+alerts() ->
+  [dict:from_list(Alert) || Alert <- triage_handler:recent_alerts(alert_lines(), [?POPCORN_ERROR])].
 
 -spec known_nodes() -> list().
 known_nodes() ->

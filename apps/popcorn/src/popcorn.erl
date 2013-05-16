@@ -12,7 +12,7 @@
 %% @doc Start the popcorn server.
 start() 			-> [application:start(App) || App <-
 										[ranch, cowboy, mustache,
-										 protobuffs, inets,
+										 protobuffs, inets, eleveldb,
 										 webmachine, folsom, rps,
                      flake, popcorn
 										 ]].

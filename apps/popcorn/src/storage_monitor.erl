@@ -55,7 +55,7 @@ init([]) ->
 
     ?POPCORN_DEBUG_MSG("#storage_monitor starting"),
     Workers = pg2:get_local_members(storage),
-    lager:info("Monitoring ~p", [Workers]),
+    ?POPCORN_INFO_MSG("Monitoring ~p", [Workers]),
     [spawn(?MODULE, monitor_storage, [Proc]) || Proc <- Workers],
 
     erlang:send_after(?WORKER_HEALTH_INTERVAL, self(), check_worker_health),
@@ -85,20 +85,22 @@ publish_worker_change(Workers) ->
     pubsub:publish(storage, {new_storage_workers, Workers}).
 
 monitor_storage(Proc) ->
-    erlang:monitor(process,Proc),
-    receive
-       {'DOWN', Ref, process, Pid,  normal} -> ok;
-       {'DOWN', Ref, process, Pid,  Reason} ->
-            Workers = pg2:get_local_members(storage) -- [Proc],
-            lager:info("Detected down storage node - published reduced set of workers ~p", [Workers]),
-            pubsub:publish(storage, {new_storage_workers, Workers})
-    end.
+  erlang:monitor(process,Proc),
+  receive
+    {'DOWN', Ref, process, Pid,  normal} ->
+      ok;
+    {'DOWN', Ref, process, Pid,  Reason} ->
+      Workers = pg2:get_local_members(storage) -- [Proc],
+      ?POPCORN_INFO_MSG("Detected down storage node - published reduced set of workers ~p", [Workers]),
+      pubsub:publish(storage, {new_storage_workers, Workers})
+  end.
 
 monitor_new_pids(Known_Workers, Current_Workers) ->
-    New_Workers = Current_Workers -- Known_Workers,
-    [spawn(?MODULE, monitor_storage, [Proc]) || Proc <- New_Workers].
+  New_Workers = Current_Workers -- Known_Workers,
+  [spawn(?MODULE, monitor_storage, [Proc]) || Proc <- New_Workers].
 
-get_storage_pid([]) -> ?STORAGE_PID;
+get_storage_pid([]) ->
+  ?STORAGE_PID;
 get_storage_pid(List) ->
-    Index = random:uniform(length(List)),
-    lists:nth(Index, List).
+  Index = random:uniform(length(List)),
+  lists:nth(Index, List).

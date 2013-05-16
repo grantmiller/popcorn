@@ -26,8 +26,24 @@
          jiffy_safe_array/1,
          jiffy_safe_proplist/1,
          top/0, top/1, top/2,
-         ftop/0, ftop/1, ftop/2
+         ftop/0, ftop/1, ftop/2,
+         any_to_bin/1,
+         inverse_id/1
      ]).
+
+inverse_id(Id) ->
+  base62:encode(99999999999999999999999999999999 - base62:decode(binary_to_list(Id))).
+
+any_to_bin(I) when is_list(I) ->
+  list_to_binary(I);
+any_to_bin(I) when is_atom(I) ->
+  any_to_bin(atom_to_list(I));
+any_to_bin(I) when is_integer(I) ->
+  any_to_bin(integer_to_list(I));
+any_to_bin(I) when is_float(I) ->
+  any_to_bin(float_to_list(I));
+any_to_bin(I) when is_binary(I) ->
+  I.
 
 node_event_counter(Node_Name) ->
     Prefix = <<"node_events__">>,
