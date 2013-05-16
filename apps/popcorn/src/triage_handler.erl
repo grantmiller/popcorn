@@ -29,7 +29,8 @@
 
 -include("include/popcorn.hrl").
 
--record(state, {incident = 1   :: integer(),
+-record(state, {incident = 1 :: integer(),
+                update_counters_dirty = false :: boolean(),
                 update_counters_timer :: reference(),
                 storage_workers = [] :: list()}).
 
@@ -176,13 +177,13 @@ handle_cast({triage_logmessage, #popcorn_node{} = Node, Node_Pid,
       ok
   end,
   increment_counters_after_creating_alert(Node, Node_Pid, Severity, Product, Version, Module, Line, Storage_Pid, Log_Message#log_message.message),
-  {noreply, reset_timer(State)};
+  {noreply, reset_timer(State#state{update_counters_dirty = true})};
 
 %% @doc If the event was not an alert, but it was a new node, trigger an alert that this node was created
 handle_cast({triage_logmessage, #popcorn_node{} = Node, _Node_Pid, _Log_Message, true}, State) ->
   outbound_notifier:notify(new_node, as_proplist(Node)),
   dashboard_stream_fsm:broadcast({new_node, Node}),
-  {noreply, State};
+  {noreply, State#state{update_counters_dirty = true}};
 
 %% @doc All other events should not trigger alerts
 handle_cast({triage_logmessage, #popcorn_node{}, _Node_Pid, _Log_Message, false}, State) ->
@@ -197,7 +198,7 @@ handle_info({broadcast, {new_storage_workers, Storage_Workers}}, State) ->
   {noreply, State#state{storage_workers = Storage_Workers}};
 
 %% @doc Timer will fire this to update all counters
-handle_info(update_counters, State) ->
+handle_info(update_counters, State) when State#state.update_counters_dirty =:= true ->
   lists:foreach(
       fun({_, undefined}) ->
            ok;
@@ -223,6 +224,8 @@ handle_info(update_counters, State) ->
      {alert_count,       Alert_Count}],
 
   dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
+  {noreply, reset_timer(State)};
+handle_info(update_counters, State) ->
   {noreply, reset_timer(State)};
 
 handle_info(_Info, State) ->

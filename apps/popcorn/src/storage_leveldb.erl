@@ -46,11 +46,8 @@
 -define(PREFIX_MESSAGE, <<"13">>).
 -define(PREFIX_EXPIRATION, <<"14">>).
 -define(PREFIX_ALERT, <<"15">>).
--define(PREFIX_ALERTKEY, <<"16">>).
--define(PREFIX_ALERTCOUNTER, <<"17">>).
--define(PREFIX_ALERTTIMESTAMP, <<"18">>).
--define(PREFIX_RELEASESCM, <<"19">>).
--define(PREFIX_RELEASESCMMAPPING, <<"20">>).
+-define(PREFIX_RELEASESCM, <<"16">>).
+-define(PREFIX_RELEASESCMMAPPING, <<"17">>).
 
 -define(BOOKMARK_COLLECTION, key_name(collection, "0")).
 -define(BOOKMARK_NODE, key_name(node, "0")).
@@ -58,9 +55,6 @@
 -define(BOOKMARK_MESSAGE, key_name(message, "0")).
 -define(BOOKMARK_EXPIRATION, key_name(expiration, "0")).
 -define(BOOKMARK_ALERT, key_name(alert, "0")).
--define(BOOKMARK_ALERTKEY, key_name(alertkey, "0")).
--define(BOOKMARK_ALERTCOUNTER, key_name(alertcounter, "0")).
--define(BOOKMARK_ALERTTIMESTAMP, key_name(alerttimestamp, "0")).
 -define(BOOKMARK_RELEASESCM, key_name(releasescm, "0")).
 -define(BOOKMARK_RELEASESCMMAPPING, key_name(releasescmmapping, "0")).
 -define(BOOKMARK_END, key_name(<<"99">>, "0")).
@@ -75,9 +69,6 @@ key_name(counter, Name) -> <<?PREFIX_COUNTER/binary, Name/binary>>;
 key_name(message, Name) -> <<?PREFIX_MESSAGE/binary, Name/binary>>;
 key_name(expiration, Name) -> <<?PREFIX_EXPIRATION/binary, Name/binary>>;
 key_name(alert, Name) -> <<?PREFIX_ALERT/binary, Name/binary>>;
-key_name(alertkey, Name) -> <<?PREFIX_ALERT/binary, Name/binary>>;
-key_name(alertcounter, Name) -> <<?PREFIX_ALERTCOUNTER/binary, Name/binary>>;
-key_name(alerttimestamp, Name) -> <<?PREFIX_ALERTTIMESTAMP/binary, Name/binary>>;
 key_name(releasescm, Name) -> <<?PREFIX_RELEASESCM/binary, Name/binary>>;
 key_name(releasescmmapping, Name) -> <<?PREFIX_RELEASESCMMAPPING/binary, Name/binary>>;
 key_name(O, Name) when O =:= <<"99">> -> <<O/binary, Name/binary>>.
@@ -103,9 +94,6 @@ init([worker]) ->
   eleveldb:put(Db_Ref, ?BOOKMARK_MESSAGE, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_EXPIRATION, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_ALERT, <<>>, []),
-  eleveldb:put(Db_Ref, ?BOOKMARK_ALERTKEY, <<>>, []),
-  eleveldb:put(Db_Ref, ?BOOKMARK_ALERTCOUNTER, <<>>, []),
-  eleveldb:put(Db_Ref, ?BOOKMARK_ALERTTIMESTAMP, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_RELEASESCM, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_RELEASESCMMAPPING, <<>>, []),
   eleveldb:put(Db_Ref, ?BOOKMARK_END, <<>>, []),
@@ -160,13 +148,9 @@ handle_call({get_alerts, Severities, Sort}, _From, State) ->
            State}
       end
   end;
-handle_call({get_alert_keys, Type}, _From, State) ->
-  {reply, [], State};
 handle_call({get_release_module_link, Role, Version, Module}, _From, State) ->
   {reply, undefined, State};
 handle_call({search_messages, {S, P, V, M, L, Page_Size, Starting_Timestamp}}, _From, State) ->
-  {reply, [], State};
-handle_call({get_alert_timestamps, Severities}, _From, State) ->
   {reply, [], State};
 handle_call({is_known_node, Node_Name}, _From, State) ->
   case eleveldb:get(State#state.db_ref, key_name(collection, <<"nodes">>), []) of
@@ -278,7 +262,7 @@ increment_counter(Db_Ref, Counter, Increment_By) ->
 
 send_recent_log_line(_, _, _, 0, _) -> ok;
 send_recent_log_line(Db_Ref, Iterator, Pid, Count, Filters) ->
-  Next_Bookmark = ?BOOKMARK_ALERT,
+  Next_Bookmark = ?BOOKMARK_EXPIRATION,
   case eleveldb:iterator_move(Iterator, next) of
     {error, invalid_iterator} ->
       ok;
