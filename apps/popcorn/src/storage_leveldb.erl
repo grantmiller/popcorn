@@ -166,6 +166,14 @@ handle_call({alert_exists, Alert_Location}, _From, State) ->
     {ok, _} ->
       {reply, true, State}
   end;
+handle_call({get_log_message, Message_Id}, _From, State) ->
+  Inverse_Id = popcorn_util:inverse_id(Message_Id),
+  case eleveldb:get(State#state.db_ref, key_name(message, Inverse_Id), []) of
+    not_found ->
+      {reply, undefined, State};
+    {ok, Log_Message_Bin} ->
+      {reply, binary_to_term(Log_Message_Bin), State}
+  end;
 
 handle_call(Request, _From, State) ->
   {stop, {unknown_call, Request}, State}.
@@ -242,7 +250,10 @@ handle_cast({new_alert_instance, Alert_Location, Message_Id}, State) ->
   end,
   {noreply, State};
 
-handle_cast(_Msg, State) -> {noreply, State}.
+handle_cast(Message, State) ->
+  ?POPCORN_WARN_MSG("received unknown message: ~p", [Message]),
+  {noreply, State}.
+
 handle_info(_Msg, State) -> {noreply, State}.
 terminate(_Reason, State) ->
   eleveldb:close(State#state.db_ref),

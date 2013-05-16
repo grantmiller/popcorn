@@ -164,9 +164,11 @@ handle_cast({triage_logmessage, #popcorn_node{} = Node, Node_Pid,
     true ->
       gen_server:cast(Storage_Pid, {new_alert_instance, Alert_Location, Log_Message#log_message.message_id});
     false ->
-      gen_server:cast(Storage_Pid, {new_alert, #alert{location = Alert_Location,
-                                                      message_ids = [Log_Message#log_message.message_id],
-                                                      most_recent_timestamp = ?NOW}})
+      gen_server:cast(Storage_Pid, {new_alert,
+                                    #alert{location = Alert_Location,
+                                           message_ids = [Log_Message#log_message.message_id],
+                                           most_recent_timestamp = ?NOW},
+                                    Log_Message#log_message.message_id})
   end,
 
   case Is_New_Node of
@@ -224,7 +226,7 @@ handle_info(update_counters, State) when State#state.update_counters_dirty =:= t
      {alert_count,       Alert_Count}],
 
   dashboard_stream_fsm:broadcast({update_counters, NewCounters}),
-  {noreply, reset_timer(State)};
+  {noreply, reset_timer(State#state{update_counters_dirty = false})};
 handle_info(update_counters, State) ->
   {noreply, reset_timer(State)};
 
